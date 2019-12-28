@@ -22,7 +22,7 @@
 #include <PubSubClient.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include <Servo.h>
+
 
 
 // Emulate Serial1 on pins 6/7 if not present
@@ -31,9 +31,8 @@
 SoftwareSerial Serial1(6, 7); // RX, TX
 #endif
 
-#define SERVO_PIN 4
-
-Servo servo;
+#define RED_LED 2
+#define GREEN_LED 3
 
 #define RST_PIN 9
 #define SS_PIN 10
@@ -102,6 +101,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
+  digitalWrite(GREEN_LED,HIGH);
+  digitalWrite(RED_LED,LOW);
+  delay(3000);
+  digitalWrite(GREEN_LED,LOW);
+  digitalWrite(RED_LED,HIGH);
 }
 
 void reconnect() {
@@ -112,6 +116,7 @@ void reconnect() {
     String clientId = "ESP8266Client-";
     clientId += String(random(0xffff), HEX);
     // Attempt to connect
+    
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
       // Once connected, publish an announcement...
@@ -175,10 +180,11 @@ boolean getID()
 
 void setup() {
 
+  pinMode(RED_LED,OUTPUT);
+  pinMode(GREEN_LED,OUTPUT);
   Serial.begin(115200);
   // initialize serial for ESP module
   Serial1.begin(9600);
-  servo.attach(SERVO_PIN);
   // initialize ESP module
   WiFi.init(&Serial1);
   setup_wifi();
@@ -199,10 +205,11 @@ void loop() {
   }
   client.loop();
 
+  digitalWrite(RED_LED,HIGH);
+
     //Wait until new tag is available
   while (getID() && (millis() - rfidDelay > lastRfidScan)) 
   {
-    Serial.println("in loop");
     lastRfidScan = millis();
     char message[MSG_BUFFER_SIZE];
     strcpy(message,tagID.c_str());   
@@ -210,21 +217,29 @@ void loop() {
     {      
       Serial.println("Access granted!");
       message[tagID.length()] = '1';
-      servo.write(90);
-      delay(1000);
-      servo.write(0);
+      digitalWrite(GREEN_LED,HIGH);
+      digitalWrite(RED_LED,LOW);
+      delay(3000);
+      digitalWrite(GREEN_LED,LOW);
+      digitalWrite(RED_LED,HIGH);
     }
     else
     {
       Serial.println("Access Denied!");
       message[tagID.length()] = '0';
+      for (int i = 0; i < 10; i++) {
+        digitalWrite(RED_LED,LOW);
+        delay(100);
+        digitalWrite(RED_LED,HIGH);
+        delay(100);
+      }
     }
     Serial.print("Publish message: ");
     Serial.println(message);
     client.publish("outTopic", message);
   }
 
-  unsigned long now = millis();
+  /*unsigned long now = millis();
   if (now - lastMsg > 30000) {
     lastMsg = now;
     ++value;
@@ -232,5 +247,5 @@ void loop() {
     Serial.print("Publish message: ");
     Serial.println(msg);
     client.publish("outTopic", msg);
-  }
+  }*/
 }

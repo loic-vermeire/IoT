@@ -8,6 +8,9 @@ byte readCard[4];
 String MasterTag = "D60E35F9";  // REPLACE this Tag ID with your Tag ID!!!
 String tagID = "";
 
+unsigned int rfidDelay = 2000;
+unsigned long lastRfidScan;
+
 // Create instances
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
@@ -24,8 +27,10 @@ void loop()
 {
   
   //Wait until new tag is available
-  while (getID()) 
+  while (getID() && (millis() - rfidDelay > lastRfidScan)) 
   {
+
+    lastRfidScan = millis();
     
     if (tagID == MasterTag) 
     {
@@ -36,8 +41,7 @@ void loop()
     {
       Serial.println("Access Denied!");
     }
-    
-    delay(2000);
+
 
   }
 }
@@ -64,7 +68,7 @@ boolean getID()
   }
   }
   tagID.toUpperCase();
-  Serial.println(tagID);
+  //Serial.println(tagID);
   mfrc522.PICC_HaltA(); // Stop reading
   return true;
 }

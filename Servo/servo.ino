@@ -1,6 +1,6 @@
 #include <Servo.h>
  
-int servoPin = 9;
+#define servoPin 3
  
 Servo servo;
  
