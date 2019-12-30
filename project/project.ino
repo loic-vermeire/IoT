@@ -22,7 +22,7 @@
 #include <PubSubClient.h>
 #include <SPI.h>
 #include <MFRC522.h>
-
+#include <avr/wdt.h>
 
 
 // Emulate Serial1 on pins 6/7 if not present
@@ -86,6 +86,8 @@ void setup_wifi() {
     Serial.print(".");
   }
 
+  wdt_reset();  // Reset the watchdog
+
   randomSeed(micros());
 
   printWifiStatus();
@@ -106,17 +108,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
   delay(3000);
   digitalWrite(GREEN_LED,LOW);
   digitalWrite(RED_LED,HIGH);
+
+  wdt_reset();  // Reset the watchdog
 }
 
 void reconnect() {
   // Loop until we're reconnected
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
+    
     // Create a random client ID
     String clientId = "ESP8266Client-";
     clientId += String(random(0xffff), HEX);
-    // Attempt to connect
     
+    // Attempt to connect
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
       // Once connected, publish an announcement...
@@ -127,8 +132,10 @@ void reconnect() {
       Serial.print("failed, rc=");
       Serial.print(client.state());
       Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
+      
+      delay(5000);  // Wait 5 seconds before retrying
+      
+      wdt_reset();  // Reset the watchdog
     }
   }
 }
@@ -144,14 +151,14 @@ void printWifiStatus()
   Serial.print("IP Address: ");
   Serial.println(ip);
 
-  // print the received signal strength
+  // Print the received signal strength
   long rssi = WiFi.RSSI();
   Serial.print("Signal strength (RSSI):");
   Serial.print(rssi);
   Serial.println(" dBm");
 }
 
-//Read new tag if available
+// Read new tag if available
 boolean getID() 
 {
   // Getting ready for Reading PICCs
@@ -175,17 +182,17 @@ boolean getID()
   tagID.toUpperCase();
   //Serial.println(tagID);
   mfrc522.PICC_HaltA(); // Stop reading
+  wdt_reset();  // Reset the watchdog
   return true;
 }
 
 void setup() {
+  wdt_enable(WDTO_8S); // enable watchdog timer on 8 seconds
 
   pinMode(RED_LED,OUTPUT);
   pinMode(GREEN_LED,OUTPUT);
-  Serial.begin(115200);
-  // initialize serial for ESP module
-  Serial1.begin(9600);
-  // initialize ESP module
+  Serial.begin(115200);  // initialize serial for ESP module
+  Serial1.begin(9600);  // initialize ESP module
   WiFi.init(&Serial1);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
@@ -194,20 +201,18 @@ void setup() {
   SPI.begin(); // SPI bus
   mfrc522.PCD_Init(); // MFRC522
   Serial.println("Scan your rfid card");
-
-
 }
 
 void loop() {
-
+  // attempting reconnect if connection failed
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
 
-  digitalWrite(RED_LED,HIGH);
+  digitalWrite(RED_LED, HIGH);
 
-    //Wait until new tag is available
+  //Wait until new tag is available
   while (getID() && (millis() - rfidDelay > lastRfidScan)) 
   {
     lastRfidScan = millis();
@@ -238,6 +243,8 @@ void loop() {
     Serial.println(message);
     client.publish("outTopic", message);
   }
+
+  wdt_reset();  // Reset the watchdog
 
   /*unsigned long now = millis();
   if (now - lastMsg > 30000) {
