@@ -187,6 +187,8 @@ boolean getID()
 }
 
 void setup() {
+  wdt_disable();  // Disable the watchdog and wait for more than 2 seconds,
+  delay(3000);  // so that the Arduino doesn't keep resetting infinitely in case of wrong configuration
   wdt_enable(WDTO_8S); // enable watchdog timer on 8 seconds
 
   pinMode(RED_LED,OUTPUT);
