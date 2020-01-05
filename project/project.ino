@@ -1,3 +1,9 @@
+/*
+ * Authors: Loic Vermeire & Anton Thomas
+ * Email: loic.vermeire@student.kdg.be
+ *        anton.thomas@student.kdg.be
+*/
+
 #include <WiFiEsp.h>
 #include <PubSubClient.h>
 #include <SPI.h>
