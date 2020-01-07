@@ -9,6 +9,7 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <avr/wdt.h>
+#include <LiquidCrystal.h>
 
 // Emulate Serial1 on pins 6/7 if not present
 #ifndef HAVE_HWSERIAL1
@@ -28,22 +29,25 @@ SoftwareSerial Serial1(6, 7); // RX, TX
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 WiFiEspClient espClient;
 PubSubClient client(espClient);
+// lcd(RS,E,D4,D5,D6,D7) mapped to analog
+LiquidCrystal lcd(A1, A0, A2, A3, A4, A5);
 
 //variables related to wifi connection
 //update if necessary
-const char* ssid = "telenet-150EA";
-const char* password = "n05HJCWAMbSP";
-//const char* ssid = "iot";
-//const char* password = "wachtwoord";
-//const char* ssid = "VERMEIRE";
-//const char* password = "DRAMADRAMA";
-const char* mqtt_server = "192.168.0.212";
+const char* ssid = "AndroidAP3113";
+const char* password = "iotExamen";
+const char* mqtt_server = "BROKER_IP";
 int status = WL_IDLE_STATUS;
 
 //rfid tag variables
 byte readCard[4];
 String MasterTag = "D60E35F9";  // REPLACE this Tag ID with your Tag ID!!!
 String tagID = "";
+
+//lcd variables
+bool lcdDefault;
+unsigned short lcdChangeDelay = 3000; //LCD prints default message after 3s, change this value as desired
+unsigned long lastLcdChange;
 
 //msg buffer for publishing
 #define MSG_BUFFER_SIZE  (50)
@@ -52,18 +56,20 @@ char msg[MSG_BUFFER_SIZE];
 //variables related to lock
 enum LOCK_STATE {
   LOCK_OPEN,
-  LOCK_CLOSED
+  LOCK_CLOSED,
+  LOCK_DENIED
 };
 LOCK_STATE lockState;
 LOCK_STATE lastLockState;
 unsigned long lockOpenMillis;
+unsigned short lockOpenDelay = 3000; //Lock remains open for 3s, change this value as desired
 
 //delay for rfid scan
-unsigned short rfidDelay = 2000; //change this value as desired
+unsigned short rfidDelay = 3000; //One scan every 3s, change this value as desired
 unsigned long lastRfidScan;
 
 //delay for mqtt loop
-byte mqttLoopDelay = 100; //change value as desired
+byte mqttLoopDelay = 100; //short delay to avoid stressing esp over SoftwareSerial
 unsigned long lastMqttLoop;
 
 void setup() {
@@ -80,6 +86,13 @@ void setup() {
   
   Serial.begin(9600);  // initialize serial for console
   Serial1.begin(9600);  // initialize ESP module
+
+  // set up the LCD's number of columns and rows:
+  lcd.begin(16, 2);
+  lcd.noBlink();
+  lcd.clear();
+  // Print a message to the LCD.
+  lcd.print("Initialising...");
   
   WiFi.init(&Serial1); //initialize wifi connection
   setup_wifi();
@@ -97,11 +110,14 @@ void setup() {
         digitalWrite(RED_LED,HIGH);
         delay(100);
   }
+
+  //default LCD message
+  writeLcdDefault();
 }
 
 void loop() {
   wdt_reset();
-  
+
   //non-blocking delay needed to not overload ESP
   if (millis() - mqttLoopDelay >= lastMqttLoop) {
     // attempting reconnect if connection failed
@@ -125,6 +141,11 @@ void loop() {
 
   //check the state of the lock
   checkLockState();
+
+  //revert lcd to default message after delay
+  if ((!lcdDefault) && (millis() - lcdChangeDelay >= lastLcdChange)) {
+    writeLcdDefault();
+  }
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -137,15 +158,24 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println();
 
-  lockState = LOCK_OPEN;
+  payload[length] = '\0'; 
+  if (!strcmp(topic,"inTopic")) {
+    if (!strcmp((char *)payload,"unlock")) {
+      lockState = LOCK_OPEN;
+      lockOpenMillis = millis();
+      Serial.println("Door Unlocked");
+      writeLcd("Door Unlocked");
+    }
+  }
+
 
   wdt_reset();  // Reset the watchdog
 }
 
 void checkLockState() {
   
-    //close lock after 3s
-    if (lockState == LOCK_OPEN && (millis() - 3000 >= lockOpenMillis)) {
+    //close lock after a certain delay
+    if (lockState == LOCK_OPEN && (millis() - lockOpenDelay >= lockOpenMillis)) {
       lockState = LOCK_CLOSED;
     }
 
@@ -157,6 +187,16 @@ void checkLockState() {
         digitalWrite(RED_LED,LOW);
         //code to open lock
       } 
+      else if (lockState == LOCK_DENIED) {
+        //blink 6 times
+        for (int i = 0; i < 6; i++) {
+          digitalWrite(RED_LED,LOW);
+          delay(100);
+          digitalWrite(RED_LED,HIGH);
+          delay(100);
+        }
+        lockState = LOCK_CLOSED;
+      }
       else {
         digitalWrite(GREEN_LED,LOW);
         digitalWrite(RED_LED,HIGH);
@@ -177,20 +217,16 @@ void check_RFID() {
     {      
       lockState = LOCK_OPEN;
       lockOpenMillis = millis();
-      Serial.println("Access granted!");
+      Serial.println("Access Granted!");
+      writeLcd("Access Granted!");
       msg[tagID.length()] = '1';
     }
     else
     {
+      lockState = LOCK_DENIED;
       Serial.println("Access Denied!");
+      writeLcd("Access Denied!");
       msg[tagID.length()] = '0';
-      //blink 6 times
-      for (int i = 0; i < 6; i++) {
-        digitalWrite(RED_LED,LOW);
-        delay(100);
-        digitalWrite(RED_LED,HIGH);
-        delay(100);
-      }
     }
   }
   wdt_reset();  // Reset the watchdog  
@@ -295,4 +331,17 @@ void setup_wifi() {
   randomSeed(micros());
 
   printWifiStatus();
+}
+
+void writeLcd(char* msg) {
+  lcd.clear();
+  lcd.print(msg);
+  lastLcdChange = millis();
+  lcdDefault = 0;
+}
+
+void writeLcdDefault() {
+  lcd.clear();
+  lcd.print("Please scan RFID");
+  lcdDefault = 1;
 }
